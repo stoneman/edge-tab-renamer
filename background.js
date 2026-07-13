@@ -1,3 +1,44 @@
+// Create context menu item on the tab strip
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "renameTab",
+    title: "Rename Tab",
+    contexts: ["tab"]
+  });
+});
+
+// Handle context menu click
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== "renameTab" || !tab) return;
+
+  try {
+    // Activate the tab so the prompt is visible
+    await chrome.tabs.update(tab.id, { active: true });
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (currentTitle) => prompt("Rename tab:", currentTitle),
+      args: [tab.title]
+    });
+    const newTitle = results?.[0]?.result;
+    if (newTitle) {
+      // Store original title if not already stored
+      const urlKey = `original_url_${tab.url}`;
+      const originalResult = await chrome.storage.local.get([`original_${tab.id}`, urlKey]);
+      if (!originalResult[`original_${tab.id}`] && !originalResult[urlKey]) {
+        await chrome.storage.local.set({
+          [`original_${tab.id}`]: tab.title,
+          [urlKey]: tab.title
+        });
+      }
+      await chrome.storage.local.set({ [`tab_${tab.id}`]: newTitle });
+      await renameTab(tab.id, newTitle);
+    }
+  } catch (error) {
+    console.error('Context menu rename failed:', error);
+  }
+});
+
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'renameTab') {
